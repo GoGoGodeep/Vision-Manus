@@ -43,7 +43,8 @@ class evaluate:
         # 对前景区域做连通域分析
         # num_labels: 连通域数量（包含背景）
         # labels: 每个像素所属的连通域编号
-        num_labels, labels = cv2.connectedComponents(mask > 0)
+        binary = (mask > 0).astype("uint8")
+        num_labels, labels = cv2.connectedComponents(binary)
 
         # 计算最大前景连通域的像素数量
         # 从 1 开始是为了跳过背景（背景通常是 0）
@@ -75,16 +76,15 @@ class evaluate:
             0.2 * smoothness        # 平滑度权重
         )
 
-        return score, "ok"
+        return score
 
 
     def soft_evaluate(self, mask):
         # Implementation of soft evaluation logic
-        pass
+        return 0.0
 
     def run(self, mask):
         hard_score = self.hard_evaluate(mask)
         soft_score = self.soft_evaluate(mask)
-
 
         return hard_score + soft_score

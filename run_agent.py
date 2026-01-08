@@ -1,129 +1,65 @@
 import streamlit as st
-import numpy as np
 import cv2
-from PIL import Image
-import time
-
-# =========================
-# Tools (模型占位)
-# =========================
-
-def segment_full(image):
-    h, w = image.shape[:2]
-    mask = np.zeros((h, w), np.uint8)
-    cv2.rectangle(mask, (w//4, h//4), (3*w//4, 3*h//4), 255, -1)
-    return mask
-
-def tile_image(image, tile_size=512, overlap=64):
-    h, w = image.shape[:2]
-    tiles = []
-    for y in range(0, h, tile_size - overlap):
-        for x in range(0, w, tile_size - overlap):
-            tile = image[y:y+tile_size, x:x+tile_size]
-            tiles.append((x, y, tile))
-    return tiles
-
-def segment_tile(tile):
-    return np.ones(tile.shape[:2], np.uint8) * 255
-
-def merge_tiles(tiles, masks, image_shape):
-    H, W = image_shape[:2]
-    merged = np.zeros((H, W), np.float32)
-    weight = np.zeros((H, W), np.float32)
-    for (x, y, _), m in zip(tiles, masks):
-        h, w = m.shape
-        merged[y:y+h, x:x+w] += m
-        weight[y:y+h, x:x+w] += 1
-    merged /= np.maximum(weight, 1e-6)
-    return (merged > 127).astype(np.uint8) * 255
-
-def postprocess(mask):
-    kernel = np.ones((5, 5), np.uint8)
-    return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-
-# =========================
-# Evaluator
-# =========================
-
-def evaluate_mask(mask):
-    h, w = mask.shape
-    area = h * w
-    fg = np.sum(mask > 0)
-
-    coverage = fg / area
-    if coverage < 0.01 or coverage > 0.95:
-        return 0.0, "❌ Coverage abnormal"
-
-    _, labels = cv2.connectedComponents(mask > 0)
-    largest = np.max(np.bincount(labels.flat)[1:]) if labels.max() > 0 else 0
-    connectivity = largest / max(fg, 1)
-
-    edges = cv2.Canny(mask, 100, 200)
-    smoothness = 1 - np.sum(edges > 0) / area
-
-    score = 0.4 * coverage + 0.4 * connectivity + 0.2 * smoothness
-    return score, "OK"
-
-# =========================
-# Streamlit UI
-# =========================
+import numpy as np
+from agent.visionmanus_no_detect import vision_manus_segment
 
 st.set_page_config(layout="wide")
-st.title("🧠 Vision Manus Agentx")
+st.title("Vision-Manus")
 
-with st.sidebar:
-    uploaded = st.file_uploader("上传图像", type=["jpg", "png"])
-    score_thresh = st.slider("质量阈值", 0.5, 0.95, 0.85)
-    tile_size = st.selectbox("Tile Size", [256, 512, 768])
-    overlap = st.selectbox("Overlap", [32, 64, 128])
-    run = st.button("🚀 运行 Agent")
+uploaded = st.file_uploader("Upload an image", type=["jpg", "png"])
+
+score_thresh = st.slider(
+    "Score Threshold",
+    min_value=0.5,
+    max_value=0.95,
+    value=0.85,
+    step=0.01
+)
+
+# 用于保存 agent 运行轨迹
+if "steps" not in st.session_state:
+    st.session_state.steps = []
+
+def step_callback(step, image, mask, score):
+    st.session_state.steps.append({
+        "step": step,
+        "image": image,
+        "mask": mask,
+        "score": score
+    })
 
 if uploaded:
-    image = np.array(Image.open(uploaded).convert("RGB"))
-    st.image(image, caption="输入图像", use_column_width=True)
+    st.session_state.steps.clear()
 
-if uploaded and run:
-    log = st.empty()
-    progress = st.progress(0)
+    file_bytes = np.asarray(bytearray(uploaded.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # ---------- Step 1 ----------
-    log.markdown("### Step 1️⃣ 全图分割")
-    mask = segment_full(image)
-    score, msg = evaluate_mask(mask)
-    st.image(mask, caption=f"Score={score:.3f} | {msg}", clamp=True)
-    progress.progress(25)
-    time.sleep(0.5)
+    st.subheader("Input Image")
+    st.image(image, use_container_width=True)
 
-    if score >= score_thresh:
-        st.success("✅ 全图分割通过")
-        st.stop()
+    if st.button("Run Vision Manus Agent"):
+        agent = vision_manus_segment(step_callback=step_callback)
+        final_mask = agent.run(image, score_thresh)
 
-    # ---------- Step 2 ----------
-    log.markdown("### Step 2️⃣ 分块分割 + 融合")
-    tiles = tile_image(image, tile_size, overlap)
-    masks = []
+    # === 可视化执行过程 ===
+    for i, s in enumerate(st.session_state.steps):
+        with st.expander(f"Step {i+1}: {s['step']}", expanded=True):
+            col1, col2 = st.columns(2)
 
-    for i, (_, _, t) in enumerate(tiles):
-        masks.append(segment_tile(t))
-        progress.progress(25 + int(50 * (i+1) / len(tiles)))
+            with col1:
+                st.markdown("**Input Image**")
+                st.image(s["image"], use_container_width=True)
 
-    merged = merge_tiles(tiles, masks, image.shape)
-    score, msg = evaluate_mask(merged)
-    st.image(merged, caption=f"Score={score:.3f} | {msg}", clamp=True)
-    time.sleep(0.5)
+            with col2:
+                st.markdown("**Mask Output**")
+                st.image(
+                    s["mask"],
+                    use_container_width=True,
+                    clamp=True
+                )
 
-    if score >= score_thresh:
-        st.success("✅ 分块融合通过")
-        st.stop()
-
-    # ---------- Step 3 ----------
-    log.markdown("### Step 3️⃣ 后处理修复")
-    refined = postprocess(merged)
-    score, msg = evaluate_mask(refined)
-    st.image(refined, caption=f"Score={score:.3f} | {msg}", clamp=True)
-    progress.progress(100)
-
-    if score >= score_thresh:
-        st.success("✅ 后处理通过")
-    else:
-        st.warning("⚠ 未达标，返回最优结果")
+            st.metric(
+                label="Evaluation Score",
+                value=f"{s['score']:.3f}"
+            )
