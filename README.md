@@ -1,4 +1,4 @@
 ## Vision Manus
 
 
-<img width="7" height="20" alt="image" src="https://github.com/user-attachments/assets/64d2142d-74a7-4d2d-ad2b-2fa59b39c82f" />
+<img width="1845" height="1079" alt="流程图" src="https://github.com/user-attachments/assets/19ed2886-32b2-460d-8906-190a5b623723" />
