@@ -4,4 +4,4 @@
 
 
 ## 🗺️ 整体流程图
-<img width="1871" height="1080" alt="截屏2026-01-09 14 05 05" src="https://github.com/user-attachments/assets/adf1410c-6842-4ef3-a891-631309ee31ef" />
+<img width="1806" height="1079" alt="流程图" src="https://github.com/user-attachments/assets/ba566ee6-05ad-45f5-8ccc-7f0eb51b0d85" />
