@@ -10,6 +10,8 @@ from agent.planner import Planner
 from agent.prompts import task_understanding_prompt, router_prompt
 from agent.segment import segmenter_iSeg
 
+from tools.base import TOOL_REGISTRY
+
 
 # —————————————————————————————— 页面基础 ——————————————————————————————
 st.set_page_config(
@@ -86,10 +88,6 @@ def render_chat(logs):
 # —————————————————————————————— Session State ——————————————————————————————
 if "logs" not in st.session_state:
     st.session_state.logs = []
-if "image" not in st.session_state:
-    st.session_state.image = None
-if "final_mask" not in st.session_state:
-    st.session_state.final_mask = None
 if "running" not in st.session_state:
     st.session_state.running = False
 
@@ -101,7 +99,7 @@ with st.sidebar:
     if file:
         img = Image.open(file).convert("RGB")
         st.session_state.image = img
-        st.image(img, caption="输入图片", use_container_width=True)
+        st.image(img, caption="输入图片", width="stretch")
 
     st.markdown("---")
     st.markdown("### 用户任务目标")
@@ -162,6 +160,7 @@ if st.session_state.running:
 
     # —————————————————————————————— 多轮推理 ——————————————————————————————
     attempt = 1
+    IMG = np.array(st.session_state.image)
     while attempt < max_retry + 1:
         st.session_state.logs.append(("sys", f"第 {attempt} 轮推理开始"))
         with log_box.container():
@@ -174,7 +173,7 @@ if st.session_state.running:
         if attempt == 1:
             mask = image_seg.segment(
                 class_name=task_object, 
-                img=np.array(st.session_state.image)
+                img=IMG
             )
             st.session_state.logs.append(("sys", f"第 {attempt} 轮 Mask"))
             st.image(mask, width=400)
@@ -184,7 +183,13 @@ if st.session_state.running:
             result = evaluator.run(mask)
             st.session_state.logs.append(("sys", f"Eval: {result}"))
         else:
-            pass
+            st.session_state.logs.append(("sys", f"第 {attempt} 轮 Mask"))
+            st.image(mask, width=400)
+            with log_box.container():
+                render_chat(st.session_state.logs)
+
+            result = evaluator.run(mask)
+            st.session_state.logs.append(("sys", f"Eval: {result}"))
 
         router_thinking, router_answer = understander.run(
             sys_prompt=router_prompt,
@@ -193,24 +198,38 @@ if st.session_state.running:
         st.session_state.logs.append(("sys", f"思考: {router_thinking}"))
         st.session_state.logs.append(("sys", f"回答: {router_answer}"))
         with log_box.container():
+            render_chat(st.session_state.logs)
+    
+        router_answer = json.loads(router_answer)
+        tool_name = router_answer["tool"]
+
+        if tool_name == "Terminate":
+            st.session_state.logs.append(("sys", "通过，生成 Final Mask"))
+            st.markdown("### 最终分割结果")
+            st.image(mask, width=600)
+            with log_box.container():
                 render_chat(st.session_state.logs)
-        # if result["score"] > quality_th:
-        #     st.session_state.final_mask = mask
-        #     st.session_state.logs.append(("sys", "LLM 判定通过，生成 Final Mask"))
-        #     with log_box.container():
-        #         render_chat(st.session_state.logs)
-        #     break
-        # else:
-        #     st.session_state.logs.append(("sys", "质量不达标，进入失败恢复策略"))
-        #     with log_box.container():
-        #         render_chat(st.session_state.logs)
+            break
+        elif tool_name not in TOOL_REGISTRY:
+            raise ValueError(f"Unknown tool: {tool_name}")
+        else:
+            params = router_answer.get("parameters", {})
+
+            if "img" in params:
+                params["img"] = IMG
+            if params.get("class_name") == "task_object":
+                params["class_name"] = task_object
+
+            tool_fn = TOOL_REGISTRY[tool_name]
+            mask = tool_fn(**params)
 
         attempt += 1
 
         time.sleep(0.1)
 
     if attempt == max_retry + 1:
+        st.session_state.logs.append(("sys", "流程结束，未通过"))
         st.markdown("### 最终分割结果")
-        st.image(mask, width=400)
+        st.image(mask, width=600)
 
     st.session_state.running = False
