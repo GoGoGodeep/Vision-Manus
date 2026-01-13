@@ -76,7 +76,7 @@ class evaluate:
             0.2 * smoothness        # 平滑度权重
         )
 
-        return score
+        return score, coverage, connectivity, smoothness
 
 
     def soft_evaluate(self, mask):
@@ -84,7 +84,14 @@ class evaluate:
         return 0.0
 
     def run(self, mask):
-        hard_score = self.hard_evaluate(mask)
+        hard_score, coverage, connectivity, smoothness = self.hard_evaluate(mask)
         soft_score = self.soft_evaluate(mask)
 
-        return hard_score + soft_score
+        return {
+            "score": hard_score + soft_score,
+            "hard_score": hard_score,
+            "soft_score": soft_score,
+            "coverage": coverage,
+            "connectivity": connectivity,
+            "smoothness": smoothness
+        }

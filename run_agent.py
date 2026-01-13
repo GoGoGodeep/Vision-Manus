@@ -1,65 +1,216 @@
+# streamlit run run_agent.py --server.address 0.0.0.0
 import streamlit as st
-import cv2
 import numpy as np
-from agent.visionmanus_no_detect import vision_manus_segment
+from PIL import Image
+import time
+import json
 
-st.set_page_config(layout="wide")
-st.title("Vision-Manus")
+from agent.evaluation import evaluate
+from agent.planner import Planner
+from agent.prompts import task_understanding_prompt, router_prompt
+from agent.segment import segmenter_iSeg
 
-uploaded = st.file_uploader("Upload an image", type=["jpg", "png"])
 
-score_thresh = st.slider(
-    "Score Threshold",
-    min_value=0.5,
-    max_value=0.95,
-    value=0.85,
-    step=0.01
+# —————————————————————————————— 页面基础 ——————————————————————————————
+st.set_page_config(
+    page_title="Vision Manus",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# 用于保存 agent 运行轨迹
-if "steps" not in st.session_state:
-    st.session_state.steps = []
+st.markdown("""
+<style>
+.chat-area { 
+    display:flex; 
+    flex-direction:column; 
+    gap:1.2rem; 
+}
 
-def step_callback(step, image, mask, score):
-    st.session_state.steps.append({
-        "step": step,
-        "image": image,
-        "mask": mask,
-        "score": score
-    })
+.chat-row-user, .chat-row-sys {
+    display:flex;
+    align-items:flex-end;
+    gap:0.6rem;
+    margin-top: 0.3rem;
+    margin-bottom: 0.3rem;
+    justify-content:flex-start;   /* 全部左对齐 */
+}
 
-if uploaded:
-    st.session_state.steps.clear()
+.chat-bubble-user {
+    background:#e8f0ff;
+    padding:0.7rem 0.9rem;
+    border-radius:14px 14px 14px 4px;
+    max-width:100%;
+    box-shadow:0 1px 3px rgba(0,0,0,0.08);
+}
 
-    file_bytes = np.asarray(bytearray(uploaded.read()), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+.chat-bubble-sys {
+    background:#f5f5f5;
+    padding:0.7rem 0.9rem;
+    border-radius:14px 14px 14px 4px;
+    max-width:100%;
+    border:1px solid #eee;
+}
 
-    st.subheader("Input Image")
-    st.image(image, use_container_width=True)
+.chat-avatar {
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    object-fit:cover;
+}
+</style>
+""", unsafe_allow_html=True)
 
-    if st.button("Run Vision Manus Agent"):
-        agent = vision_manus_segment(step_callback=step_callback)
-        final_mask = agent.run(image, score_thresh)
+USER_AVATAR = "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+SYS_AVATAR  = "https://cdn-icons-png.flaticon.com/512/4712/4712109.png"
 
-    # === 可视化执行过程 ===
-    for i, s in enumerate(st.session_state.steps):
-        with st.expander(f"Step {i+1}: {s['step']}", expanded=True):
-            col1, col2 = st.columns(2)
+def render_chat(logs):
+    st.markdown('<div class="chat-area">', unsafe_allow_html=True)
+    for role, msg in logs:
+        if role == "user":
+            st.markdown(f"""
+            <div class="chat-row-user">
+                <img class="chat-avatar" src="{USER_AVATAR}">
+                <div class="chat-bubble-user">{msg}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="chat-row-sys">
+                <img class="chat-avatar" src="{SYS_AVATAR}">
+                <div class="chat-bubble-sys">{msg}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-            with col1:
-                st.markdown("**Input Image**")
-                st.image(s["image"], use_container_width=True)
 
-            with col2:
-                st.markdown("**Mask Output**")
-                st.image(
-                    s["mask"],
-                    use_container_width=True,
-                    clamp=True
-                )
+# —————————————————————————————— Session State ——————————————————————————————
+if "logs" not in st.session_state:
+    st.session_state.logs = []
+if "image" not in st.session_state:
+    st.session_state.image = None
+if "final_mask" not in st.session_state:
+    st.session_state.final_mask = None
+if "running" not in st.session_state:
+    st.session_state.running = False
 
-            st.metric(
-                label="Evaluation Score",
-                value=f"{s['score']:.3f}"
+
+# —————————————————————————————— Sidebar ——————————————————————————————
+with st.sidebar:
+    st.markdown("### 输入图片")
+    file = st.file_uploader("上传图片", type=["png", "jpg", "jpeg"])
+    if file:
+        img = Image.open(file).convert("RGB")
+        st.session_state.image = img
+        st.image(img, caption="输入图片", use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("### 用户任务目标")
+    user_prompt = st.text_input("请输入任务描述", "Segmenting the pantograph in the image.")
+
+    st.markdown("---")
+    run = st.button("运行 Vision Manus")
+
+
+# —————————————————————————————— 主界面 ——————————————————————————————
+st.title("Vision Manus")
+
+if run and user_prompt and st.session_state.image is not None:
+    st.session_state.running = True
+
+log_box = st.empty()
+
+evaluator = evaluate()
+
+
+# —————————————————————————————— 执行流程 ——————————————————————————————
+if st.session_state.running:
+    # ---- 意图识别 ----
+    understander = Planner()
+    st.session_state.logs.append(("user", user_prompt))
+    with log_box.container():
+        render_chat(st.session_state.logs)
+
+    thinking, task = understander.run(
+        sys_prompt=task_understanding_prompt,
+        user_prompt=user_prompt
+    )
+
+    content = json.loads(task)
+    user_goal = content.get("user_goal")
+    task_object = content.get("task_object")
+
+    st.session_state.logs.append(("sys", f"思考: {thinking}"))
+    st.session_state.logs.append(("sys", f"用户目标: {user_goal}, 任务对象: {task_object}"))
+    with log_box.container():
+        render_chat(st.session_state.logs)
+
+    max_retry = 3
+    quality_th = 0.85
+    task_model = {
+        "Segmentation": "iSeg-Plus",
+        "Detection": "YOLO-World"
+    }
+
+    st.session_state.logs.append(
+        ("sys", f"任务模型: {task_model[user_goal]}, 质量阈值：{quality_th}, 最大重试轮数: {max_retry}")
+    )
+    with log_box.container():
+        render_chat(st.session_state.logs)
+
+    image_seg = segmenter_iSeg()
+    time.sleep(0.1)
+
+    # —————————————————————————————— 多轮推理 ——————————————————————————————
+    attempt = 1
+    while attempt < max_retry + 1:
+        st.session_state.logs.append(("sys", f"第 {attempt} 轮推理开始"))
+        with log_box.container():
+            render_chat(st.session_state.logs)
+
+        st.session_state.logs.append(("sys", f"开始调用 {task_model[user_goal]} 分割模型"))
+        with log_box.container():
+            render_chat(st.session_state.logs)
+
+        if attempt == 1:
+            mask = image_seg.segment(
+                class_name=task_object, 
+                img=np.array(st.session_state.image)
             )
+            st.session_state.logs.append(("sys", f"第 {attempt} 轮 Mask"))
+            st.image(mask, width=400)
+            with log_box.container():
+                render_chat(st.session_state.logs)
+
+            result = evaluator.run(mask)
+            st.session_state.logs.append(("sys", f"Eval: {result}"))
+        else:
+            pass
+
+        router_thinking, router_answer = understander.run(
+            sys_prompt=router_prompt,
+            user_prompt=str(result)
+        )
+        st.session_state.logs.append(("sys", f"思考: {router_thinking}"))
+        st.session_state.logs.append(("sys", f"回答: {router_answer}"))
+        with log_box.container():
+                render_chat(st.session_state.logs)
+        # if result["score"] > quality_th:
+        #     st.session_state.final_mask = mask
+        #     st.session_state.logs.append(("sys", "LLM 判定通过，生成 Final Mask"))
+        #     with log_box.container():
+        #         render_chat(st.session_state.logs)
+        #     break
+        # else:
+        #     st.session_state.logs.append(("sys", "质量不达标，进入失败恢复策略"))
+        #     with log_box.container():
+        #         render_chat(st.session_state.logs)
+
+        attempt += 1
+
+        time.sleep(0.1)
+
+    if attempt == max_retry + 1:
+        st.markdown("### 最终分割结果")
+        st.image(mask, width=400)
+
+    st.session_state.running = False

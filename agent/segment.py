@@ -1,5 +1,5 @@
 import numpy as np
-from iseg.demo import run_one_image, load_model
+from iSeg_Plus.demo import run_one_image, load_model
 
 from PIL import Image
 
@@ -13,13 +13,13 @@ class segmenter_iSeg:
         print("iSeg model loaded.")
 
 
-    def segment(self, np_img):
-        mask = run_one_image(self.model, np_img)
+    def segment(self, class_name, img):
+        mask = run_one_image(self.model, class_name, img)
 
         return mask
 
 
-    def patch_segment(self, np_img, rows=2, cols=2, overlap=0,
+    def patch_segment(self, class_name, img, rows=2, cols=2, overlap=0,
                           run_args=None):
         """
         将输入图片 np_img 拆成 rows×cols 个 patch（可带重叠），
@@ -29,7 +29,7 @@ class segmenter_iSeg:
             - 尺寸与输入一致
             - 仅包含黑白（0 与 255）两种像素值
         """
-        H, W = np_img.shape[:2]
+        H, W = img.shape[:2]
         run_args = {} if run_args is None else run_args.copy()
         ph = H // rows
         pw = W // cols
@@ -45,11 +45,11 @@ class segmenter_iSeg:
                 x0 = max(0, c * pw - overlap)
                 x1 = min(W, (c + 1) * pw + overlap if c < cols - 1 else W)
 
-                patch = np_img[y0:y1, x0:x1]
+                patch = img[y0:y1, x0:x1]
 
                 # ---- 单 patch 推理 ----
                 mask = run_one_image(
-                    self.model, patch,
+                    self.model, class_name, patch,
                     iter_count=run_args.get("iter_count", 5),
                     thr=run_args.get("thr", 0.5),
                     ent=run_args.get("ent", 0.5),
