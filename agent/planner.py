@@ -36,7 +36,7 @@ class Planner:
 
         generated_ids = self.model.generate(
             **model_inputs,
-            max_new_tokens=1280 * 8
+            max_new_tokens=1280*8
         )
 
         output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist()

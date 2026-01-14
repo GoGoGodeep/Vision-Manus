@@ -3,11 +3,13 @@ import numpy as np
 from skimage.restoration import denoise_bilateral
 
 
-def postprocess_preserve_small(mask,
-                               small_component_thr=80,
-                               hole_size_thr=200,
-                               sigma_color=0.15,
-                               sigma_spatial=3):
+def postprocess_preserve_small(
+        mask,
+        small_component_thr=80,
+        hole_size_thr=200,
+        sigma_color=0.15,
+        sigma_spatial=3
+    ):
     """
     后处理：保留小目标 + 去噪
     mask: uint8 {0,255}

@@ -1,16 +1,22 @@
 import numpy as np
 from iSeg_Plus.demo import run_one_image, load_model
-
 from PIL import Image
+
+import streamlit as st
+
+
+@st.cache_resource
+def load_iseg_model(device="cuda"):
+    print("Loading iSeg model for segmentation...")
+    model = load_model(device=device, use_half=True)
+    print("iSeg model loaded.")
+    return model
 
 
 class segmenter_iSeg:
     def __init__(self, device="cuda"):
         self.device = device
-
-        print("Loading iSeg model for segmentation...")
-        self.model = load_model(device=self.device, use_half=True)
-        print("iSeg model loaded.")
+        self.model = load_iseg_model(device)
 
 
     def segment(self, class_name, img):

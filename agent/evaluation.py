@@ -87,11 +87,13 @@ class evaluate:
         hard_score, coverage, connectivity, smoothness = self.hard_evaluate(mask)
         soft_score = self.soft_evaluate(mask)
 
+        total_score = round(hard_score + soft_score, 4)
+
         return {
-            "score": hard_score + soft_score,
-            "hard_score": hard_score,
-            "soft_score": soft_score,
-            "coverage": coverage,
-            "connectivity": connectivity,
-            "smoothness": smoothness
+            "score": total_score,
+            "hard_score": round(hard_score, 4),
+            "soft_score": round(soft_score, 4),
+            "coverage": round(coverage, 4),
+            "connectivity": round(connectivity, 4),
+            "smoothness": round(smoothness, 4)
         }
