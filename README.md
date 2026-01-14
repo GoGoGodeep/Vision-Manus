@@ -14,4 +14,4 @@ streamlit run run_agent.py --server.address 0.0.0.0
 ```
 
 ## 🗺️ 整体流程图
-<img width="1822" height="1046" alt="流程图" src="https://github.com/user-attachments/assets/443653a3-2833-41a9-a39a-8d7a2fe0ef1e" />
+<img width="1887" height="1079" alt="1" src="https://github.com/user-attachments/assets/71c74793-269e-4f4a-923a-c8b3a708f079" />
