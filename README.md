@@ -1,5 +1,9 @@
 # Vision Manus
 
+https://github.com/user-attachments/assets/990d242d-e60a-468f-9915-bd4b4e8e53e4
+
+
+
 ## 🚀 Quick Start
 ### 1. 环境准备
 ```bash
