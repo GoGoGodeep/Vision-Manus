@@ -1,7 +1,7 @@
 # Vision Manus
 
-https://github.com/user-attachments/assets/990d242d-e60a-468f-9915-bd4b4e8e53e4
-
+## 演示视频
+[![演示视频]](https://github.com/user-attachments/assets/990d242d-e60a-468f-9915-bd4b4e8e53e4)
 
 
 ## 🚀 Quick Start
