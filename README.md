@@ -18,3 +18,4 @@ streamlit run run_agent.py --server.address 0.0.0.0
 
 ## 📃 可视化页面
 <img width="1897" height="837" alt="页面" src="https://github.com/user-attachments/assets/49bd65c6-b389-4b05-9733-58969d0c91b4" />
+<img width="1902" height="919" alt="运行" src="https://github.com/user-attachments/assets/cc29af27-c10d-40ff-8568-d17ea4cbf4de" />
