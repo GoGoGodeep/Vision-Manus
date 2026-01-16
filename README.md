@@ -1,8 +1,7 @@
 # Vision Manus
 
 ## 演示视频
-https://github.com/user-attachments/assets/76dea1d8-bc94-448d-819e-e0abf1bd5abc
-
+https://github.com/user-attachments/assets/bcbfe590-b5a4-4547-bd78-7764a73f69be
 
 ## 🚀 Quick Start
 ### 1. 环境准备
