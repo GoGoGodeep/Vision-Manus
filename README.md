@@ -18,7 +18,7 @@ streamlit run run_agent.py --server.address 0.0.0.0
 ```
 
 ## 🗺️ 整体流程图
-<img width="1565" height="374" alt="流程图" src="https://github.com/user-attachments/assets/e612b74c-7bee-4e50-8a96-f9e8b0b92c61" />
+<img width="1828" height="1080" alt="流程图" src="https://github.com/user-attachments/assets/e612b74c-7bee-4e50-8a96-f9e8b0b92c61" />
 
 ## 📃 路径规划
 <img width="1565" height="374" alt="Router信息" src="https://github.com/user-attachments/assets/ce00d579-fc28-4779-8d1b-380ff8acb18f" />
