@@ -45,16 +45,52 @@ Return a JSON object in the following format:
 """
 
 
-# 分割prompt
-"""
-"""
-segmentation_prompt = """You are an image segmentation expert. Your task is to generate a precise segmentation mask for the given image, accurately delineating the boundaries of the target object while minimizing inclusion of background elements. Please ensure that the mask is smooth and continuous, avoiding any holes or gaps."""
-
-
 # soft evaluation prompt
 """
+
 """
-soft_evaluation_prompt = """You are an evaluation expert. Your task is to provide a qualitative assessment of a given segmentation mask, focusing on aspects such as visual coherence, adherence to object boundaries, and overall aesthetic quality. Provide a score between 0 and 1, along with a brief explanation of your evaluation."""          
+soft_evaluation_prompt = """
+You are an expert in visual understanding and segmentation evaluation.
+
+You are given:
+- Image 1: the original image
+- Image 2: a segmentation mask corresponding to the original image
+
+## Visual Concept
+{}
+
+## Tasks:
+Task 1: Coverage Evaluation  
+Compare the mask with the original image.
+Judge whether the mask covers the region that should be covered in the original image.
+Focus on:
+- Whether the main target is included
+- Whether large important parts are missing
+- Whether too much background is incorrectly included
+
+Give:
+- coverage_score: a float in [0,1]
+- coverage_reason: a concise explanation
+
+Task 2: Semantic Evaluation  
+Compare the mask with the Visual Concept.
+Judge whether the mask matches the semantic meaning:
+- Object type
+- Shape characteristics
+
+Give:
+- semantic_score: a float in [0,1]
+- semantic_reason: a concise explanation
+
+## Output Format
+Return a JSON object in the following format:
+{{
+  "coverage_score": float,
+  "coverage_reason": string,
+  "semantic_score": float,
+  "semantic_reason": string
+}}
+"""          
 
 
 # 路径规划prompt
@@ -185,9 +221,7 @@ Return a JSON object in the following format:
 }
 """
 
-"""
 
-"""
 router_prompt_rag = """
 You are the Decision Agent of a Vision Manus system.
 Your responsibility is NOT to perform vision algorithms,and NOT to write code.

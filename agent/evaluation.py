@@ -1,11 +1,27 @@
+import json, re
 import cv2
 import numpy as np
+from transformers import AutoProcessor, AutoModelForImageTextToText
+import streamlit as st
+
+
+@st.cache_resource
+def load_model(model_name: str):
+    model = AutoModelForImageTextToText.from_pretrained(
+        model_name, 
+        dtype="auto", 
+        device_map="auto"
+    )
+    processor = AutoProcessor.from_pretrained(model_name)
+    return processor, model
 
 
 class evaluate:
 
     def __init__(self):
-        pass
+        self.model_name = "/home/kexin/hd1/zkf/Qwen3-VL-4bit"
+        self.processor, self.model = load_model(self.model_name)
+
 
     def hard_evaluate(self, mask):
         """
@@ -79,15 +95,65 @@ class evaluate:
         return score, coverage, connectivity, smoothness
 
 
-    def soft_evaluate(self, mask):
-        # Implementation of soft evaluation logic
-        return 0.0
+    def soft_evaluate(self, img, mask, prompt):
 
-    def run(self, mask):
+        # 统一 mask 为 3 通道
+        if isinstance(mask, np.ndarray):
+            if mask.ndim == 2:
+                mask = np.stack([mask]*3, axis=-1)
+            elif mask.ndim == 3 and mask.shape[0] == 1:
+                mask = np.repeat(mask, 3, axis=0)
+        else:
+            if mask.mode != "RGB":
+                mask = mask.convert("RGB")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": img},
+                    {"type": "image", "image": mask},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+
+        # Preparation for inference
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+        inputs = inputs.to(self.model.device)
+
+        # Inference: Generation of the output
+        generated_ids = self.model.generate(**inputs, max_new_tokens=1280)
+        generated_ids_trimmed = [
+            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+
+        output_text = self.processor.batch_decode(
+            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
+
+        text = output_text[0] if isinstance(output_text, list) else output_text
+        result = json.loads(text)
+
+        coverage_score, coverage_reason, semantic_score, semantic_reason = result["coverage_score"], result["coverage_reason"], result["semantic_score"], result["semantic_reason"]
+
+        return coverage_score, coverage_reason, semantic_score, semantic_reason
+
+
+    def run(self, img, mask, prompt, visual_concept):
         hard_score, coverage, connectivity, smoothness = self.hard_evaluate(mask)
-        soft_score = self.soft_evaluate(mask)
 
-        total_score = round(hard_score + soft_score, 4)
+        prompt_rag = prompt.format(visual_concept)
+        coverage_score, coverage_reason, semantic_score, semantic_reason = self.soft_evaluate(img, mask, prompt_rag)
+        soft_score = 0.5 * coverage_score + 0.5 * semantic_score
+
+        total_score = round(0.4 * hard_score + 0.6 * soft_score, 4)
 
         return {
             "score": total_score,
@@ -96,4 +162,4 @@ class evaluate:
             "coverage": round(coverage, 4),
             "connectivity": round(connectivity, 4),
             "smoothness": round(smoothness, 4)
-        }
+        }, coverage_reason, semantic_reason

@@ -6,7 +6,7 @@ import time, json
 
 from agent.evaluation import evaluate
 from agent.planner import Planner
-from agent.prompts import task_understanding_prompt, router_prompt, router_prompt_rag
+from agent.prompts import task_understanding_prompt, router_prompt, router_prompt_rag, soft_evaluation_prompt
 from agent.segment import segmenter_iSeg
 from agent.memory import Memory
 
@@ -14,7 +14,6 @@ from tools.base import TOOL_REGISTRY
 
 from rag.vision_rag import VisionRAG
 from rag.strategy_writer import StrategyWriter, summarize_strategy
-
 
 MAX_RETRY=3
 
@@ -191,8 +190,10 @@ if st.session_state.running:
                 render_history()
 
                 # 评估初始分割结果
-                result = evaluator.run(mask)
+                result, coverage_reason, semantic_reason = evaluator.run(IMG, mask, soft_evaluation_prompt, rag_visual_context)
                 st.session_state.logs.append(("sys", f"评分：{result}"))
+                st.session_state.logs.append(("sys", f"覆盖率评估：{coverage_reason}"))
+                st.session_state.logs.append(("sys", f"语义评估：{semantic_reason}"))
                 with log_box.container(): 
                     render_chat(st.session_state.logs)
 
@@ -212,8 +213,10 @@ if st.session_state.running:
                 render_history()
 
                 # 对当前 mask 进行质量评估
-                result = evaluator.run(mask)
-                st.session_state.logs += [("sys",f"评分：{result}")]
+                result, coverage_reason, semantic_reason = evaluator.run(IMG, mask, soft_evaluation_prompt, rag_visual_context)
+                st.session_state.logs.append(("sys", f"评分：{result}"))
+                st.session_state.logs.append(("sys", f"覆盖率评估：{coverage_reason}"))
+                st.session_state.logs.append(("sys", f"语义评估：{semantic_reason}"))
                 with log_box.container(): 
                     render_chat(st.session_state.logs)
 
@@ -244,7 +247,7 @@ if st.session_state.running:
                 "visual_prior": rag_visual_context,
                 "historical_strategies": strategy_cases
             }
-            print(router_input)
+            # print(router_input)
 
             router_thinking, router_answer = understander.run(
                 sys_prompt = router_prompt_rag,

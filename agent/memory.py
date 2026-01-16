@@ -28,5 +28,5 @@ class Memory:
 
     def summary(self, max_steps=5):
         recent = self.steps[-max_steps:]
-        # print(recent)
+        print(recent)
         return json.dumps(recent, ensure_ascii=False, indent=2)
